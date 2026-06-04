@@ -1,0 +1,31 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: econoup-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: jdbc:mysql://localhost:3306/econoup?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=utf8
+    username: root
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    property-naming-strategy: LOWER_CAMEL_CASE
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:local-dev-secret-change-before-real-use-at-least-32-bytes}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:10080}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+  curriculum:
+    import-on-startup: ${CURRICULUM_IMPORT_ON_STARTUP:true}
+    path: classpath:data/curriculum.xlsx
