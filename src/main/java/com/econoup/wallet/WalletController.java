@@ -1,0 +1,32 @@
+package com.econoup.wallet;
+
+import com.econoup.common.ApiResponse;
+import com.econoup.user.UserEntity;
+import com.econoup.wallet.WalletService.WalletAmountRequest;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/wallet")
+public class WalletController {
+    private final WalletService walletService;
+
+    public WalletController(WalletService walletService) {
+        this.walletService = walletService;
+    }
+
+    @GetMapping
+    public ApiResponse<?> balance(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(walletService.balance(user));
+    }
+
+    @PostMapping("/bills/grant")
+    public ApiResponse<?> grant(@AuthenticationPrincipal UserEntity user, @RequestBody WalletAmountRequest request) {
+        return ApiResponse.ok(walletService.grant(user, request));
+    }
+
+    @PostMapping("/bills/spend")
+    public ApiResponse<?> spend(@AuthenticationPrincipal UserEntity user, @RequestBody WalletAmountRequest request) {
+        return ApiResponse.ok(walletService.spend(user, request));
+    }
+}
