@@ -147,7 +147,8 @@ public class CurriculumImporter {
                         stringCell(row.getCell(4)),
                         toPayloadJson(questionType, interactionType, choicesText, resourceText),
                         toAnswerJson(questionType, answerText),
-                        nullableStringCell(row.getCell(8))
+                        nullableStringCell(row.getCell(8)),
+                        nullableStringCell(row.getCell(9))
                 ));
                 importedSessionCount++;
             }

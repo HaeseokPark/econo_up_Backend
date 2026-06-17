@@ -85,6 +85,27 @@ public class MyPageController {
         ));
     }
 
+    @GetMapping("/progress/competency-report")
+    public ApiResponse<?> competencyReport(@AuthenticationPrincipal UserEntity user) {
+        List<Map<String, Object>> competencies = categoryRepository.findAllByOrderBySortOrderAsc().stream()
+                .map(category -> {
+                    long total = sessionRepository.countByStage_Unit_Category_Code(category.code);
+                    long done = attemptRepository.countCompletedSessionsByUserAndCategory(user.id, category.code);
+                    return Map.<String, Object>of(
+                            "categoryCode", category.code,
+                            "categoryName", category.name,
+                            "score", percent(done, total),
+                            "level", percent(done, total) >= 80 ? "STRONG" : percent(done, total) >= 30 ? "GROWING" : "STARTER"
+                    );
+                })
+                .toList();
+        return ApiResponse.ok(Map.of(
+                "totalXp", user.totalXp,
+                "competencies", competencies,
+                "summary", "MVP competency report"
+        ));
+    }
+
     private int percent(long done, long total) {
         if (total <= 0) return 0;
         return (int) Math.round(done * 100.0 / total);

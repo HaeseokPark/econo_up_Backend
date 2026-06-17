@@ -31,6 +31,9 @@ public class QuestionEntity {
     @Column(columnDefinition = "TEXT")
     public String explanation;
 
+    @Column(name = "highlight_text", columnDefinition = "TEXT")
+    public String highlightText;
+
     protected QuestionEntity() {
     }
 
@@ -41,7 +44,8 @@ public class QuestionEntity {
             String prompt,
             String payloadJson,
             String answerJson,
-            String explanation
+            String explanation,
+            String highlightText
     ) {
         this.session = session;
         this.sequence = sequence;
@@ -50,5 +54,6 @@ public class QuestionEntity {
         this.payloadJson = payloadJson;
         this.answerJson = answerJson;
         this.explanation = explanation;
+        this.highlightText = highlightText;
     }
 }

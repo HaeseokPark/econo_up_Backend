@@ -30,6 +30,15 @@
 
 > 와이어프레임에는 BM과 소셜 화면이 상세히 포함되어 있다. 본 명세는 전체 API를 정의하되, 구현 우선순위는 MVP 태그를 기준으로 판단한다.
 
+### 1.2.1 2026-06-17 배포 구현 상태
+
+| 구분 | 구현 상태 |
+| --- | --- |
+| 핵심 MVP | 온보딩, 홈, 커리큘럼, 로드맵, 스테이지 맵, 학습 세션, 답안 제출/채점, 세션 완료, 복습, 지폐 재화, 마이페이지/설정 기본 API 구현 |
+| 데이터 구조 | `questions.payload_json`, `questions.answer_json`, `learning_answers`, `review_sets`, `review_items`, `review_answers`, `purchases` 반영 |
+| 배포 안정화용 API | 뉴스/용어, 시뮬레이션, 캐릭터, 골든 티켓, 친구/소셜, 리그, 배틀 API는 404 방지를 위한 MVP/placeholder 응답 제공 |
+| 후속 고도화 | 실제 결제/영수증 검증/세금 정산, 뉴스 운영 데이터 연동, 시뮬레이션 분기 로직, 리그/배틀 매칭 로직, 소셜 그래프 저장은 후속 범위 |
+
 ### 1.3 기술 가정
 
 | 항목 | 가정 |
@@ -254,6 +263,7 @@ type PurchaseProductType = "BILL_PACK" | "HEART_REFILL" | "HEART_UNLIMITED_24H" 
     "choiceIds": ["B"]
   },
   "explanation": "약 6주(1.5개월)마다 한 번씩, 연 8회 개최.",
+  "highlightText": "FOMC는 보통 연 8회 개최",
   "reward": {
     "xpGained": 10,
     "heartConsumed": 0
@@ -886,6 +896,7 @@ type PurchaseProductType = "BILL_PACK" | "HEART_REFILL" | "HEART_UNLIMITED_24H" 
         "choiceIds": ["B"]
       },
       "explanation": "약 6주(1.5개월)마다 한 번씩, 연 8회 개최.",
+      "highlightText": "FOMC는 보통 연 8회 개최",
       "reward": {
         "xpGained": 10,
         "heartConsumed": 0
@@ -1034,6 +1045,7 @@ type PurchaseProductType = "BILL_PACK" | "HEART_REFILL" | "HEART_UNLIMITED_24H" 
         "choiceIds": ["B"]
       },
       "explanation": "약 6주(1.5개월)마다 한 번씩, 연 8회 개최.",
+      "highlightText": "FOMC는 보통 연 8회 개최",
       "reward": {
         "xpGained": 5,
         "heartConsumed": 0
@@ -1919,7 +1931,7 @@ type PurchaseProductType = "BILL_PACK" | "HEART_REFILL" | "HEART_UNLIMITED_24H" 
 | `units` | id, category_code, sequence, title, subtitle |
 | `stages` | id, unit_id, sequence, title |
 | `sessions` | id, stage_id, code, sequence, type, title |
-| `questions` | id, session_id, sequence, type, prompt, payload_json, answer_json, explanation |
+| `questions` | id, session_id, sequence, type, prompt, payload_json, answer_json, explanation, highlight_text |
 | `learning_attempts` | id, user_id, session_id, status, xp_gained, started_at, completed_at |
 | `learning_answers` | id, attempt_id, question_id, submitted_answer_json, correct, answered_at, client_answered_at |
 | `review_sets` | id, user_id, local_date, status, xp_gained, created_at, completed_at |
