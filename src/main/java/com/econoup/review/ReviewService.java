@@ -90,6 +90,7 @@ public class ReviewService {
                 "correct", correct,
                 "correctAnswer", readJson(question.answerJson),
                 "explanation", nullToEmpty(question.explanation),
+                "highlightText", feedbackHighlightText(question),
                 "reward", Map.of("xpGained", correct ? 5 : 0, "heartConsumed", 0)
         ));
         response.put("progress", progressPayload(reviewSet, nextQuestion.orElse(question), items.size()));
@@ -316,5 +317,12 @@ public class ReviewService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private String feedbackHighlightText(QuestionEntity question) {
+        if (question.highlightText != null && !question.highlightText.isBlank()) {
+            return question.highlightText;
+        }
+        return nullToEmpty(question.explanation);
     }
 }

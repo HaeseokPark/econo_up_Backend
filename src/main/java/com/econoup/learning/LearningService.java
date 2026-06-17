@@ -95,6 +95,7 @@ public class LearningService {
                 "correct", correct,
                 "correctAnswer", readJson(question.answerJson),
                 "explanation", nullToEmpty(question.explanation),
+                "highlightText", feedbackHighlightText(question),
                 "reward", Map.of("xpGained", correct ? 10 : 0, "heartConsumed", correct ? 0 : 1)
         ));
         response.put("progress", answerProgressPayload(attempt, nextQuestion.orElse(question)));
@@ -372,5 +373,12 @@ public class LearningService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private String feedbackHighlightText(QuestionEntity question) {
+        if (question.highlightText != null && !question.highlightText.isBlank()) {
+            return question.highlightText;
+        }
+        return nullToEmpty(question.explanation);
     }
 }
