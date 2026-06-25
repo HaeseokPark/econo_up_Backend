@@ -1,71 +1,62 @@
 package com.econoup.dailyconnect;
 
 import com.econoup.common.ApiResponse;
-import java.util.LinkedHashMap;
-import java.util.List;
+import com.econoup.user.UserEntity;
 import java.util.Map;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1")
 public class DailyConnectController {
+    private final DailyConnectService dailyConnectService;
+
+    public DailyConnectController(DailyConnectService dailyConnectService) {
+        this.dailyConnectService = dailyConnectService;
+    }
+
     @GetMapping("/daily-connect/articles")
     public ApiResponse<?> articles(
+            @AuthenticationPrincipal UserEntity user,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) String cursor
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "false") boolean bookmarkedOnly
     ) {
-        return ApiResponse.ok(Map.of(
-                "articles", List.of(sampleArticle("news_mvp_001", category == null ? "ECONOMY" : category)),
-                "nextCursor", "",
-                "hasMore", false
-        ));
+        return ApiResponse.ok(dailyConnectService.articles(user, category, cursor, bookmarkedOnly));
     }
 
     @GetMapping("/daily-connect/articles/{articleId}")
-    public ApiResponse<?> article(@PathVariable String articleId) {
-        Map<String, Object> article = new LinkedHashMap<>(sampleArticle(articleId, "ECONOMY"));
-        article.put("body", "Daily connect article content is prepared for MVP integration.");
-        article.put("terms", List.of(Map.of("id", "term_interest_rate", "name", "interest rate")));
-        article.put("quiz", Map.of("quizId", "quiz_" + articleId, "questionCount", 1));
-        return ApiResponse.ok(article);
+    public ApiResponse<?> article(@AuthenticationPrincipal UserEntity user, @PathVariable String articleId) {
+        return ApiResponse.ok(dailyConnectService.article(user, articleId));
     }
 
     @PutMapping("/daily-connect/articles/{articleId}/bookmark")
-    public ApiResponse<?> bookmark(@PathVariable String articleId, @RequestBody(required = false) Map<String, Object> body) {
+    public ApiResponse<?> bookmark(
+            @AuthenticationPrincipal UserEntity user,
+            @PathVariable String articleId,
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
         boolean bookmarked = body == null || !Boolean.FALSE.equals(body.get("bookmarked"));
-        return ApiResponse.ok(Map.of("articleId", articleId, "bookmarked", bookmarked));
+        return ApiResponse.ok(dailyConnectService.bookmark(user, articleId, bookmarked));
     }
 
     @PostMapping("/daily-connect/quizzes/{quizId}/answers")
-    public ApiResponse<?> quizAnswer(@PathVariable String quizId, @RequestBody(required = false) Map<String, Object> body) {
-        return ApiResponse.ok(Map.of(
-                "quizId", quizId,
-                "correct", true,
-                "explanation", "MVP quiz feedback",
-                "reward", Map.of("xpGained", 3)
-        ));
+    public ApiResponse<?> quizAnswer(
+            @AuthenticationPrincipal UserEntity user,
+            @PathVariable String quizId,
+            @RequestBody Map<String, Object> body
+    ) {
+        Object answer = body.get("answer");
+        String choiceId = "";
+        if (answer instanceof Map<?, ?> map) {
+            Object choiceIds = map.get("choiceIds");
+            if (choiceIds instanceof java.util.List<?> list && !list.isEmpty()) choiceId = String.valueOf(list.get(0));
+        }
+        return ApiResponse.ok(dailyConnectService.answerQuiz(user, quizId, choiceId));
     }
 
     @GetMapping("/terms/{termId}")
     public ApiResponse<?> term(@PathVariable String termId) {
-        return ApiResponse.ok(Map.of(
-                "id", termId,
-                "name", termId,
-                "definition", "MVP term definition",
-                "relatedStageId", ""
-        ));
-    }
-
-    private Map<String, Object> sampleArticle(String id, String categoryCode) {
-        return Map.of(
-                "id", id,
-                "categoryCode", categoryCode,
-                "title", "Daily Connect MVP Article",
-                "summary", "News feed placeholder for deployment.",
-                "thumbnailUrl", "",
-                "sourceName", "Econo-up",
-                "publishedAt", "2026-06-17T00:00:00Z",
-                "bookmarked", false
-        );
+        return ApiResponse.ok(dailyConnectService.term(termId));
     }
 }

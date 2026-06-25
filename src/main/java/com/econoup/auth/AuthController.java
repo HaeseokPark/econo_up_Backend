@@ -20,15 +20,18 @@ public class AuthController {
 
     @PostMapping("/google/login")
     public ApiResponse<?> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
-        return ApiResponse.ok(googleAuthService.login(request.idToken()));
+        requireTerms(request.termsAgreed());
+        return ApiResponse.ok(googleAuthService.login(request.idToken(), true));
     }
 
     @PostMapping("/social/login")
     public ApiResponse<?> socialLogin(@Valid @RequestBody SocialLoginRequest request) {
+        requireTerms(request.termsAgreed());
         if (!"GOOGLE".equalsIgnoreCase(request.provider())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "AUTH_PROVIDER_UNSUPPORTED", "Only Google login is supported in MVP.");
+            throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "AUTH_PROVIDER_CONFIGURATION_REQUIRED",
+                    request.provider() + " login requires provider credentials and callback configuration.");
         }
-        return ApiResponse.ok(googleAuthService.login(request.providerToken()));
+        return ApiResponse.ok(googleAuthService.login(request.providerToken(), true));
     }
 
     @PostMapping("/token/refresh")
@@ -39,5 +42,12 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<?> logout() {
         return ApiResponse.ok(java.util.Map.of("loggedOut", true));
+    }
+
+    private void requireTerms(Boolean agreed) {
+        if (!Boolean.TRUE.equals(agreed)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TERMS_AGREEMENT_REQUIRED",
+                    "Terms and privacy agreement is required.");
+        }
     }
 }

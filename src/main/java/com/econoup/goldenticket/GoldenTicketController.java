@@ -1,31 +1,26 @@
 package com.econoup.goldenticket;
 
 import com.econoup.common.ApiResponse;
-import java.util.List;
-import java.util.Map;
+import com.econoup.user.UserEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/golden-tickets")
 public class GoldenTicketController {
+    private final GoldenTicketService goldenTicketService;
+
+    public GoldenTicketController(GoldenTicketService goldenTicketService) {
+        this.goldenTicketService = goldenTicketService;
+    }
+
     @GetMapping("/current")
-    public ApiResponse<?> current() {
-        return ApiResponse.ok(Map.of(
-                "available", false,
-                "ticket", Map.of(
-                        "id", "",
-                        "title", "",
-                        "previewStages", List.of()
-                )
-        ));
+    public ApiResponse<?> current(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(goldenTicketService.current(user));
     }
 
     @PostMapping("/{ticketId}/activate")
-    public ApiResponse<?> activate(@PathVariable String ticketId) {
-        return ApiResponse.ok(Map.of(
-                "ticketId", ticketId,
-                "activated", false,
-                "message", "Golden ticket is not available in MVP."
-        ));
+    public ApiResponse<?> activate(@AuthenticationPrincipal UserEntity user, @PathVariable Long ticketId) {
+        return ApiResponse.ok(goldenTicketService.activate(user, ticketId));
     }
 }

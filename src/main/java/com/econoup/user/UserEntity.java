@@ -2,6 +2,7 @@ package com.econoup.user;
 
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -39,6 +40,16 @@ public class UserEntity {
     public int billBalance = 0;
     public int heartCurrent = 3;
     public int heartMax = 3;
+    public Instant heartRefillAt;
+    public Instant unlimitedHeartUntil;
+    public int streakReviveTicketBalance;
+    public LocalDate lastStudyDate;
+    public LocalDate streakReviveUsedDate;
+    public String equippedCharacterId = "char_economy_1";
+    public String leagueTier = "BRONZE";
+    public int crownCount;
+    public Instant termsAgreedAt;
+    public Instant deletedAt;
     public boolean reviewReminderEnabled = true;
     public String reviewReminderTime = "07:30";
     public boolean studyReminderEnabled = true;

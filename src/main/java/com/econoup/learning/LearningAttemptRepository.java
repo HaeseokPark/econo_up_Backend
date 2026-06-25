@@ -9,6 +9,29 @@ import org.springframework.data.repository.query.Param;
 public interface LearningAttemptRepository extends JpaRepository<LearningAttemptEntity, Long> {
     Optional<LearningAttemptEntity> findFirstByUser_IdAndSession_IdAndStatusOrderByStartedAtDesc(Long userId, Long sessionId, String status);
 
+    @Query("select a from LearningAttemptEntity a " +
+            "join fetch a.user " +
+            "join fetch a.session s " +
+            "join fetch s.stage st " +
+            "join fetch st.unit u " +
+            "join fetch u.category " +
+            "where a.user.id = :userId and s.id = :sessionId and a.status = :status " +
+            "order by a.startedAt desc")
+    List<LearningAttemptEntity> findWithSessionByUserAndSessionAndStatus(
+            @Param("userId") Long userId,
+            @Param("sessionId") Long sessionId,
+            @Param("status") String status
+    );
+
+    @Query("select a from LearningAttemptEntity a " +
+            "join fetch a.user " +
+            "join fetch a.session s " +
+            "join fetch s.stage st " +
+            "join fetch st.unit u " +
+            "join fetch u.category " +
+            "where a.id = :id")
+    Optional<LearningAttemptEntity> findWithSessionById(@Param("id") Long id);
+
     Optional<LearningAttemptEntity> findFirstByUser_IdAndStatusOrderByStartedAtDesc(Long userId, String status);
 
     Optional<LearningAttemptEntity> findFirstByUser_IdAndStatusOrderByCompletedAtDesc(Long userId, String status);

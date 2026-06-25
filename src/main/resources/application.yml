@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/econoup?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=utf8
     username: root
-    password: ${DB_PASSWORD:}
+    password: Qkrgoehf0206@@
   jpa:
     hibernate:
       ddl-auto: update
@@ -29,3 +29,7 @@ app:
   curriculum:
     import-on-startup: ${CURRICULUM_IMPORT_ON_STARTUP:true}
     path: classpath:data/curriculum.xlsx
+  public:
+    terms-url: ${TERMS_URL:}
+    privacy-url: ${PRIVACY_URL:}
+    support-email: ${SUPPORT_EMAIL:}

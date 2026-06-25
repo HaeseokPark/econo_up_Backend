@@ -70,7 +70,17 @@ public class CurriculumController {
                             "subtitle", nullToEmpty(unit.subtitle),
                             "status", status(done, total),
                             "progressPercent", percent(done, total),
-                            "stagePreview", stages.stream().map(stage -> stage.title).toList()
+                            "stagePreview", stages.stream().map(stage -> stage.title).toList(),
+                            "stages", stages.stream().map(stage -> {
+                                long stageTotal = sessionRepository.countByStageIdValue(stage.id);
+                                long stageDone = user == null ? 0 : attemptRepository.countCompletedSessionsByUserAndStage(user.id, stage.id);
+                                return Map.<String, Object>of(
+                                        "id", stage.id,
+                                        "title", stage.title,
+                                        "status", status(stageDone, stageTotal),
+                                        "progressPercent", percent(stageDone, stageTotal)
+                                );
+                            }).toList()
                     );
                 }).toList();
 
@@ -95,7 +105,7 @@ public class CurriculumController {
 
     @GetMapping("/units/{unitId}/stages/{stageId}/map")
     public ApiResponse<?> stageMap(@AuthenticationPrincipal UserEntity user, @PathVariable Long unitId, @PathVariable Long stageId) {
-        StageEntity stage = stageRepository.findById(stageId)
+        StageEntity stage = stageRepository.findWithUnitById(stageId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Stage not found."));
         if (!Objects.equals(stage.unit.id, unitId)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STAGE_UNIT", "Unit and stage do not match.");

@@ -1,16 +1,20 @@
 package com.econoup.home;
 
 import com.econoup.common.ApiResponse;
+import com.econoup.competition.LeagueService;
 import com.econoup.curriculum.CategoryEntity;
 import com.econoup.curriculum.CategoryRepository;
 import com.econoup.curriculum.SessionEntity;
 import com.econoup.curriculum.SessionRepository;
+import com.econoup.dailyconnect.DailyConnectService;
+import com.econoup.goldenticket.GoldenTicketService;
 import com.econoup.learning.LearningAttemptEntity;
 import com.econoup.learning.LearningAttemptRepository;
 import com.econoup.review.ReviewAnswerRepository;
 import com.econoup.review.ReviewItemRepository;
 import com.econoup.review.ReviewSetEntity;
 import com.econoup.review.ReviewSetRepository;
+import com.econoup.simulation.SimulationService;
 import com.econoup.user.UserEntity;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,6 +37,10 @@ public class HomeController {
     private final ReviewSetRepository reviewSetRepository;
     private final ReviewItemRepository reviewItemRepository;
     private final ReviewAnswerRepository reviewAnswerRepository;
+    private final DailyConnectService dailyConnectService;
+    private final SimulationService simulationService;
+    private final GoldenTicketService goldenTicketService;
+    private final LeagueService leagueService;
 
     public HomeController(
             CategoryRepository categoryRepository,
@@ -40,7 +48,11 @@ public class HomeController {
             LearningAttemptRepository attemptRepository,
             ReviewSetRepository reviewSetRepository,
             ReviewItemRepository reviewItemRepository,
-            ReviewAnswerRepository reviewAnswerRepository
+            ReviewAnswerRepository reviewAnswerRepository,
+            DailyConnectService dailyConnectService,
+            SimulationService simulationService,
+            GoldenTicketService goldenTicketService,
+            LeagueService leagueService
     ) {
         this.categoryRepository = categoryRepository;
         this.sessionRepository = sessionRepository;
@@ -48,6 +60,10 @@ public class HomeController {
         this.reviewSetRepository = reviewSetRepository;
         this.reviewItemRepository = reviewItemRepository;
         this.reviewAnswerRepository = reviewAnswerRepository;
+        this.dailyConnectService = dailyConnectService;
+        this.simulationService = simulationService;
+        this.goldenTicketService = goldenTicketService;
+        this.leagueService = leagueService;
     }
 
     @GetMapping("/home")
@@ -69,21 +85,31 @@ public class HomeController {
                 ),
                 "today", Map.of(
                         "review", reviewSummary(user),
-                        "dailyConnect", Map.of(
-                                "available", false,
-                                "completed", false
-                        )
+                        "dailyConnect", dailyConnectSummary(user)
                 ),
                 "continueLearning", continueLearning(user, progress),
-                "recommendedSimulation", Map.of(
-                        "simulationId", "",
-                        "title", "",
-                        "unlocked", false
-                ),
-                "goldenTicket", "",
-                "leaguePreview", "",
+                "recommendedSimulation", recommendedSimulation(user),
+                "goldenTicket", goldenTicketService.current(user),
+                "leaguePreview", leagueService.me(user),
                 "serverTime", Instant.now().toString()
         ));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> dailyConnectSummary(UserEntity user) {
+        Map<String, Object> result = dailyConnectService.articles(user, null, null, false);
+        List<Map<String, Object>> articles = (List<Map<String, Object>>) result.getOrDefault("articles", List.of());
+        if (articles.isEmpty()) return Map.of("available", false, "completed", false);
+        Map<String, Object> article = articles.get(0);
+        return Map.of("available", true, "completed", article.getOrDefault("quizCompleted", false), "article", article);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> recommendedSimulation(UserEntity user) {
+        Map<String, Object> result = simulationService.list(user);
+        List<Map<String, Object>> simulations = (List<Map<String, Object>>) result.getOrDefault("simulations", List.of());
+        return simulations.stream().filter(item -> Boolean.TRUE.equals(item.get("unlocked"))).findFirst()
+                .orElseGet(() -> simulations.stream().findFirst().orElse(Map.of()));
     }
 
     private Map<String, Object> categoryProgress(UserEntity user, CategoryEntity category) {
@@ -146,11 +172,17 @@ public class HomeController {
     }
 
     private Optional<SessionEntity> nextSession(SessionEntity session) {
-        List<SessionEntity> stageSessions = sessionRepository.findByStage_IdOrderBySequenceAsc(session.stage.id);
+        SessionEntity loadedSession = sessionRepository.findWithCurriculumById(session.id).orElse(session);
+        if (loadedSession.stage == null) {
+            return Optional.empty();
+        }
+        List<SessionEntity> stageSessions = sessionRepository.findByStage_IdOrderBySequenceAsc(loadedSession.stage.id);
         return stageSessions.stream()
-                .filter(next -> next.sequence > session.sequence)
+                .filter(next -> next.sequence > loadedSession.sequence)
                 .findFirst()
-                .or(() -> nextAvailableSession(session.stage.unit.category.code, session.id));
+                .or(() -> loadedSession.stage.unit == null || loadedSession.stage.unit.category == null
+                        ? Optional.empty()
+                        : nextAvailableSession(loadedSession.stage.unit.category.code, loadedSession.id));
     }
 
     private Optional<SessionEntity> nextAvailableSession(String categoryCode, Long afterSessionId) {
@@ -164,17 +196,24 @@ public class HomeController {
     }
 
     private Map<String, Object> sessionPayload(SessionEntity session) {
-        return Map.of(
-                "id", session.id,
-                "code", session.code,
-                "type", session.type,
-                "title", session.title,
-                "categoryCode", session.stage.unit.category.code,
-                "unitId", session.stage.unit.id,
-                "unitTitle", session.stage.unit.title,
-                "stageId", session.stage.id,
-                "stageTitle", session.stage.title
-        );
+        SessionEntity loadedSession = sessionRepository.findWithCurriculumById(session.id).orElse(session);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", loadedSession.id);
+        payload.put("code", loadedSession.code);
+        payload.put("type", loadedSession.type);
+        payload.put("title", loadedSession.title);
+        if (loadedSession.stage != null) {
+            payload.put("stageId", loadedSession.stage.id);
+            payload.put("stageTitle", loadedSession.stage.title);
+            if (loadedSession.stage.unit != null) {
+                payload.put("unitId", loadedSession.stage.unit.id);
+                payload.put("unitTitle", loadedSession.stage.unit.title);
+                if (loadedSession.stage.unit.category != null) {
+                    payload.put("categoryCode", loadedSession.stage.unit.category.code);
+                }
+            }
+        }
+        return payload;
     }
 
     private int percent(long done, long total) {

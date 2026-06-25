@@ -12,8 +12,26 @@ public interface SessionRepository extends JpaRepository<SessionEntity, Long> {
     List<SessionEntity> findByStage_IdOrderBySequenceAsc(Long stageId);
 
     @Query("select s from SessionEntity s " +
-            "where s.stage.unit.category.code = :categoryCode " +
-            "order by s.stage.unit.sequence asc, s.stage.sequence asc, s.sequence asc")
+            "join fetch s.stage st " +
+            "join fetch st.unit u " +
+            "join fetch u.category " +
+            "where s.id = :id")
+    Optional<SessionEntity> findWithCurriculumById(@Param("id") Long id);
+
+    @Query("select s from SessionEntity s " +
+            "join fetch s.stage st " +
+            "join fetch st.unit u " +
+            "join fetch u.category " +
+            "where st.id = :stageId " +
+            "order by s.sequence asc")
+    List<SessionEntity> findByStageIdWithCurriculumOrderBySequenceAsc(@Param("stageId") Long stageId);
+
+    @Query("select s from SessionEntity s " +
+            "join fetch s.stage st " +
+            "join fetch st.unit u " +
+            "join fetch u.category c " +
+            "where c.code = :categoryCode " +
+            "order by u.sequence asc, st.sequence asc, s.sequence asc")
     List<SessionEntity> findOrderedByCategory(@Param("categoryCode") String categoryCode);
 
     long countByStage_Unit_Category_Code(String categoryCode);

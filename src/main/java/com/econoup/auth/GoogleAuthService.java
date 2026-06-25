@@ -4,6 +4,7 @@ import com.econoup.auth.dto.AuthResponse;
 import com.econoup.common.ApiException;
 import com.econoup.user.UserEntity;
 import com.econoup.user.UserRepository;
+import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,18 +19,15 @@ public class GoogleAuthService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final String googleClientId;
 
-    public GoogleAuthService(
-            UserRepository userRepository,
-            JwtTokenProvider jwtTokenProvider,
-            @Value("${app.google.client-id}") String googleClientId
-    ) {
+    public GoogleAuthService(UserRepository userRepository, JwtTokenProvider jwtTokenProvider,
+                             @Value("${app.google.client-id}") String googleClientId) {
         this.userRepository = userRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.googleClientId = googleClientId;
     }
 
     @Transactional
-    public AuthResponse login(String idToken) {
+    public AuthResponse login(String idToken, boolean termsAgreed) {
         GoogleTokenInfo tokenInfo = verify(idToken);
         UserEntity user = userRepository.findByGoogleSubject(tokenInfo.sub).orElse(null);
         boolean isNew = user == null;
@@ -38,35 +36,29 @@ public class GoogleAuthService {
         } else {
             user.email = tokenInfo.email;
         }
+        if (termsAgreed && user.termsAgreedAt == null) user.termsAgreedAt = Instant.now();
         userRepository.save(user);
         String nextScreen = user.onboardingCompleted ? "HOME" : "ONBOARDING_PROFILE";
-        String accessToken = jwtTokenProvider.createToken(user.id);
-        String refreshToken = jwtTokenProvider.createToken(user.id);
-        return new AuthResponse(accessToken, refreshToken, isNew, nextScreen);
+        return new AuthResponse(jwtTokenProvider.createToken(user.id), jwtTokenProvider.createToken(user.id), isNew, nextScreen);
     }
 
     @Transactional(readOnly = true)
     public AuthResponse refresh(String refreshToken) {
         Long userId = jwtTokenProvider.parseUserId(refreshToken);
         UserEntity user = userRepository.findById(userId)
+                .filter(item -> item.deletedAt == null)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID", "Token user not found."));
-        String accessToken = jwtTokenProvider.createToken(user.id);
         String nextScreen = user.onboardingCompleted ? "HOME" : "ONBOARDING_PROFILE";
-        return new AuthResponse(accessToken, jwtTokenProvider.createToken(user.id), false, nextScreen);
+        return new AuthResponse(jwtTokenProvider.createToken(user.id), jwtTokenProvider.createToken(user.id), false, nextScreen);
     }
 
     private GoogleTokenInfo verify(String idToken) {
         try {
             GoogleTokenInfo info = restTemplate.getForObject(
-                    "https://oauth2.googleapis.com/tokeninfo?id_token={idToken}",
-                    GoogleTokenInfo.class,
-                    idToken
-            );
-            if (info == null || !StringUtils.hasText(info.sub) || !StringUtils.hasText(info.email)) {
-                throw failed();
-            }
+                    "https://oauth2.googleapis.com/tokeninfo?id_token={idToken}", GoogleTokenInfo.class, idToken);
+            if (info == null || !StringUtils.hasText(info.sub) || !StringUtils.hasText(info.email)) throw failed();
             if (StringUtils.hasText(googleClientId) && !googleClientId.equals(info.aud)) {
-                throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_GOOGLE_AUDIENCE_MISMATCH", "Google Client ID가 일치하지 않습니다.");
+                throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_GOOGLE_AUDIENCE_MISMATCH", "Google Client ID does not match.");
             }
             return info;
         } catch (ApiException exception) {
@@ -77,7 +69,7 @@ public class GoogleAuthService {
     }
 
     private ApiException failed() {
-        return new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_SOCIAL_LOGIN_FAILED", "Google 로그인 검증에 실패했습니다.");
+        return new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_SOCIAL_LOGIN_FAILED", "Google login token verification failed.");
     }
 
     public static class GoogleTokenInfo {

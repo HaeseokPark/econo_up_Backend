@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -49,7 +50,13 @@ public class UserController {
     @Transactional
     @DeleteMapping("/me")
     public ApiResponse<?> deleteMe(@AuthenticationPrincipal UserEntity user) {
-        userRepository.delete(user);
+        String deletedSuffix = "deleted-" + user.id + "-" + Instant.now().toEpochMilli();
+        user.googleSubject = deletedSuffix;
+        user.email = deletedSuffix + "@deleted.invalid";
+        user.nickname = null;
+        user.interestCategoryCodes = null;
+        user.deletedAt = Instant.now();
+        userRepository.save(user);
         return ApiResponse.ok(Map.of("deleted", true));
     }
 
