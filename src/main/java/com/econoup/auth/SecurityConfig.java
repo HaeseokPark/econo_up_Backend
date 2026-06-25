@@ -26,6 +26,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/google/login",
                                 "/api/v1/auth/social/login",
                                 "/api/v1/auth/token/refresh",
+                                "/api/v1/dev/auth/login",
                                 "/actuator/health"
                         ).permitAll()
                         .anyRequest().authenticated()

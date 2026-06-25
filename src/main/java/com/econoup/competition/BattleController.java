@@ -1,70 +1,75 @@
 package com.econoup.competition;
 
 import com.econoup.common.ApiResponse;
-import java.util.List;
+import com.econoup.competition.BattleService.AnswerRequest;
+import com.econoup.user.UserEntity;
 import java.util.Map;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1")
 public class BattleController {
+    private final BattleService battleService;
+
+    public BattleController(BattleService battleService) {
+        this.battleService = battleService;
+    }
+
     @GetMapping("/battles/summary")
-    public ApiResponse<?> summary() {
-        return ApiResponse.ok(Map.of(
-                "available", false,
-                "openBattles", 0,
-                "wins", 0,
-                "losses", 0
-        ));
+    public ApiResponse<?> summary(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(battleService.summary(user));
     }
 
     @PostMapping("/battles/random-matches")
-    public ApiResponse<?> randomMatch() {
-        return ApiResponse.ok(Map.of("matched", false, "battleId", "", "status", "WAITING"));
+    public ApiResponse<?> randomMatch(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(battleService.randomMatch(user));
     }
 
     @PostMapping("/battles/{battleId}/attempts")
-    public ApiResponse<?> startAttempt(@PathVariable String battleId) {
-        return ApiResponse.ok(Map.of("battleId", battleId, "attemptId", "batatt_" + battleId, "status", "IN_PROGRESS"));
+    public ApiResponse<?> startAttempt(@AuthenticationPrincipal UserEntity user, @PathVariable Long battleId) {
+        return ApiResponse.ok(battleService.startAttempt(user, battleId));
     }
 
     @PostMapping("/battle-attempts/{attemptId}/answers")
-    public ApiResponse<?> answer(@PathVariable String attemptId, @RequestBody(required = false) Map<String, Object> body) {
-        return ApiResponse.ok(Map.of("attemptId", attemptId, "accepted", true, "correct", true));
+    public ApiResponse<?> answer(@AuthenticationPrincipal UserEntity user, @PathVariable Long attemptId,
+                                 @RequestBody AnswerRequest request) {
+        return ApiResponse.ok(battleService.answer(user, attemptId, request));
     }
 
     @PostMapping("/battle-attempts/{attemptId}/complete")
-    public ApiResponse<?> complete(@PathVariable String attemptId) {
-        return ApiResponse.ok(Map.of("attemptId", attemptId, "completed", true, "score", 0));
+    public ApiResponse<?> complete(@AuthenticationPrincipal UserEntity user, @PathVariable Long attemptId) {
+        return ApiResponse.ok(battleService.complete(user, attemptId));
     }
 
     @GetMapping("/battles/{battleId}/result")
-    public ApiResponse<?> result(@PathVariable String battleId) {
-        return ApiResponse.ok(Map.of("battleId", battleId, "status", "PENDING", "winner", ""));
+    public ApiResponse<?> result(@AuthenticationPrincipal UserEntity user, @PathVariable Long battleId) {
+        return ApiResponse.ok(battleService.result(user, battleId));
     }
 
     @PostMapping("/battles/{battleId}/reactions")
-    public ApiResponse<?> reaction(@PathVariable String battleId) {
-        return ApiResponse.ok(Map.of("battleId", battleId, "sent", true));
+    public ApiResponse<?> reaction(@AuthenticationPrincipal UserEntity user, @PathVariable Long battleId,
+                                   @RequestBody(required = false) Map<String, String> body) {
+        return ApiResponse.ok(battleService.reaction(user, battleId, body == null ? null : body.get("type")));
     }
 
     @PostMapping("/battles/friend-invites")
-    public ApiResponse<?> invite() {
-        return ApiResponse.ok(Map.of("inviteId", "binv_mvp", "status", "PENDING"));
+    public ApiResponse<?> invite(@AuthenticationPrincipal UserEntity user, @RequestBody Map<String, Long> body) {
+        return ApiResponse.ok(battleService.invite(user, body.get("friendId")));
     }
 
     @PostMapping("/battles/friend-invites/{inviteId}/accept")
-    public ApiResponse<?> acceptInvite(@PathVariable String inviteId) {
-        return ApiResponse.ok(Map.of("inviteId", inviteId, "status", "ACCEPTED"));
+    public ApiResponse<?> acceptInvite(@AuthenticationPrincipal UserEntity user, @PathVariable Long inviteId) {
+        return ApiResponse.ok(battleService.respondInvite(user, inviteId, true));
     }
 
     @PostMapping("/battles/friend-invites/{inviteId}/reject")
-    public ApiResponse<?> rejectInvite(@PathVariable String inviteId) {
-        return ApiResponse.ok(Map.of("inviteId", inviteId, "status", "REJECTED"));
+    public ApiResponse<?> rejectInvite(@AuthenticationPrincipal UserEntity user, @PathVariable Long inviteId) {
+        return ApiResponse.ok(battleService.respondInvite(user, inviteId, false));
     }
 
     @GetMapping("/battles/history")
-    public ApiResponse<?> history(@RequestParam(required = false) String cursor) {
-        return ApiResponse.ok(Map.of("battles", List.of(), "nextCursor", "", "hasMore", false));
+    public ApiResponse<?> history(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(battleService.history(user));
     }
 }

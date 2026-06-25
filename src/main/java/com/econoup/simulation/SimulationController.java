@@ -1,69 +1,59 @@
 package com.econoup.simulation;
 
 import com.econoup.common.ApiResponse;
+import com.econoup.user.UserEntity;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1")
 public class SimulationController {
+    private final SimulationService simulationService;
+
+    public SimulationController(SimulationService simulationService) {
+        this.simulationService = simulationService;
+    }
+
     @GetMapping("/simulations")
-    public ApiResponse<?> simulations() {
-        return ApiResponse.ok(Map.of(
-                "simulations", List.of(Map.of(
-                        "simulationId", "sim_mvp_001",
-                        "categoryCode", "REAL_ESTATE",
-                        "title", "MVP simulation",
-                        "unlocked", false,
-                        "status", "COMING_SOON"
-                ))
-        ));
+    public ApiResponse<?> simulations(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(simulationService.list(user));
     }
 
     @PostMapping("/simulations/{simulationId}/attempts")
-    public ApiResponse<?> start(@PathVariable String simulationId) {
-        return ApiResponse.ok(Map.of(
-                "attemptId", "simatt_" + simulationId,
-                "simulationId", simulationId,
-                "status", "IN_PROGRESS",
-                "firstStepNo", 1
-        ));
+    public ApiResponse<?> start(
+            @AuthenticationPrincipal UserEntity user,
+            @PathVariable String simulationId,
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
+        boolean resume = body == null || !Boolean.FALSE.equals(body.get("resume"));
+        return ApiResponse.ok(simulationService.start(user, simulationId, resume));
     }
 
     @GetMapping("/simulation-attempts/{attemptId}/steps/{stepNo}")
-    public ApiResponse<?> step(@PathVariable String attemptId, @PathVariable int stepNo) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("attemptId", attemptId);
-        payload.put("stepNo", stepNo);
-        payload.put("title", "MVP simulation step");
-        payload.put("prompt", "Simulation scenario content is prepared for post-MVP.");
-        payload.put("choices", List.of(Map.of("id", "A", "text", "Continue")));
-        return ApiResponse.ok(payload);
+    public ApiResponse<?> step(@AuthenticationPrincipal UserEntity user, @PathVariable Long attemptId, @PathVariable int stepNo) {
+        return ApiResponse.ok(simulationService.step(user, attemptId, stepNo));
     }
 
     @PostMapping("/simulation-attempts/{attemptId}/steps/{stepNo}/answers")
     public ApiResponse<?> answer(
-            @PathVariable String attemptId,
+            @AuthenticationPrincipal UserEntity user,
+            @PathVariable Long attemptId,
             @PathVariable int stepNo,
             @RequestBody(required = false) Map<String, Object> body
     ) {
-        return ApiResponse.ok(Map.of(
-                "attemptId", attemptId,
-                "stepNo", stepNo,
-                "accepted", true,
-                "nextStepNo", stepNo >= 5 ? 0 : stepNo + 1
-        ));
+        Map<String, Object> answer = new LinkedHashMap<>();
+        if (body != null && body.get("answer") instanceof Map<?, ?> nested) {
+            nested.forEach((key, value) -> answer.put(String.valueOf(key), value));
+        } else if (body != null) {
+            answer.putAll(body);
+        }
+        return ApiResponse.ok(simulationService.answer(user, attemptId, stepNo, answer));
     }
 
     @PostMapping("/simulation-attempts/{attemptId}/complete")
-    public ApiResponse<?> complete(@PathVariable String attemptId) {
-        return ApiResponse.ok(Map.of(
-                "attemptId", attemptId,
-                "completed", true,
-                "xpGained", 0,
-                "summary", "Simulation MVP placeholder completed."
-        ));
+    public ApiResponse<?> complete(@AuthenticationPrincipal UserEntity user, @PathVariable Long attemptId) {
+        return ApiResponse.ok(simulationService.complete(user, attemptId));
     }
 }

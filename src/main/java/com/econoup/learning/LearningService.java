@@ -3,8 +3,10 @@ package com.econoup.learning;
 import com.econoup.common.ApiException;
 import com.econoup.curriculum.*;
 import com.econoup.learning.dto.AnswerRequest;
+import com.econoup.progress.ProgressService;
 import com.econoup.user.UserEntity;
 import com.econoup.user.UserRepository;
+import com.econoup.wallet.WalletService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +27,9 @@ public class LearningService {
     private final CategoryRepository categoryRepository;
     private final UserCategoryProgressRepository progressRepository;
     private final UserRepository userRepository;
+    private final ProgressService progressService;
     private final ObjectMapper objectMapper;
+    private final WalletService walletService;
 
     public LearningService(
             SessionRepository sessionRepository,
@@ -35,7 +39,9 @@ public class LearningService {
             CategoryRepository categoryRepository,
             UserCategoryProgressRepository progressRepository,
             UserRepository userRepository,
-            ObjectMapper objectMapper
+            ProgressService progressService,
+            ObjectMapper objectMapper,
+            WalletService walletService
     ) {
         this.sessionRepository = sessionRepository;
         this.questionRepository = questionRepository;
@@ -44,20 +50,22 @@ public class LearningService {
         this.categoryRepository = categoryRepository;
         this.progressRepository = progressRepository;
         this.userRepository = userRepository;
+        this.progressService = progressService;
         this.objectMapper = objectMapper;
+        this.walletService = walletService;
     }
 
     @Transactional
     public Map<String, Object> startAttempt(UserEntity user, Long sessionId, boolean resume) {
-        SessionEntity session = sessionRepository.findById(sessionId)
+        SessionEntity session = sessionRepository.findWithCurriculumById(sessionId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Session not found."));
         LearningAttemptEntity attempt = resume
-                ? attemptRepository.findFirstByUser_IdAndSession_IdAndStatusOrderByStartedAtDesc(user.id, sessionId, "IN_PROGRESS")
+                ? attemptRepository.findWithSessionByUserAndSessionAndStatus(user.id, sessionId, "IN_PROGRESS").stream().findFirst()
                 .orElseGet(() -> attemptRepository.save(new LearningAttemptEntity(user, session)))
                 : attemptRepository.save(new LearningAttemptEntity(user, session));
 
         QuestionEntity firstQuestion = firstUnansweredQuestion(attempt)
-                .or(() -> questionRepository.findFirstBySession_IdOrderBySequenceAsc(session.id))
+                .or(() -> firstQuestion(session.id))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Question not found."));
 
         return Map.of(
@@ -74,6 +82,7 @@ public class LearningService {
         QuestionEntity question = findQuestionForAttempt(attempt, request);
         Map<String, Object> submittedAnswer = submittedAnswer(request);
         boolean correct = isCorrect(question, submittedAnswer);
+        boolean heartConsumed = !correct && walletService.consumeHeart(user);
         String submittedAnswerJson = writeJson(submittedAnswer);
         answerRepository.findByAttempt_IdAndQuestion_Id(attempt.id, question.id)
                 .ifPresentOrElse(
@@ -96,7 +105,8 @@ public class LearningService {
                 "correctAnswer", readJson(question.answerJson),
                 "explanation", nullToEmpty(question.explanation),
                 "highlightText", feedbackHighlightText(question),
-                "reward", Map.of("xpGained", correct ? 10 : 0, "heartConsumed", correct ? 0 : 1)
+                "reward", Map.of("xpGained", correct ? 10 : 0, "heartConsumed", heartConsumed ? 1 : 0),
+                "heart", Map.of("current", user.heartCurrent, "max", user.heartMax)
         ));
         response.put("progress", answerProgressPayload(attempt, nextQuestion.orElse(question)));
         response.put("nextQuestion", nextQuestion.map(next -> questionPayload(next, false)).orElse(null));
@@ -121,6 +131,7 @@ public class LearningService {
             user.totalXp += attempt.xpGained - beforeXp;
             userRepository.save(user);
             updateCategoryProgress(user, session, attempt.xpGained - beforeXp);
+            progressService.record(user, attempt.xpGained - beforeXp, 5, true);
         }
 
         long doneInCategory = attemptRepository.countCompletedSessionsByUserAndCategory(user.id, categoryCode);
@@ -153,7 +164,7 @@ public class LearningService {
     }
 
     private LearningAttemptEntity findAttempt(UserEntity user, Long attemptId) {
-        LearningAttemptEntity attempt = attemptRepository.findById(attemptId)
+        LearningAttemptEntity attempt = attemptRepository.findWithSessionById(attemptId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Learning attempt not found."));
         if (!Objects.equals(attempt.user.id, user.id)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "You cannot access this learning attempt.");
@@ -163,11 +174,11 @@ public class LearningService {
 
     private QuestionEntity findQuestionForAttempt(LearningAttemptEntity attempt, AnswerRequest request) {
         if (request != null && request.questionId() != null) {
-            return questionRepository.findById(request.questionId())
+            return questionRepository.findWithCurriculumById(request.questionId())
                     .filter(question -> Objects.equals(question.session.id, attempt.session.id))
                     .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_QUESTION", "Question does not belong to this session."));
         }
-        return questionRepository.findFirstBySession_IdOrderBySequenceAsc(attempt.session.id)
+        return firstQuestion(attempt.session.id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Question not found."));
     }
 
@@ -245,19 +256,23 @@ public class LearningService {
     }
 
     private Optional<QuestionEntity> nextQuestion(QuestionEntity question) {
-        return questionRepository.findBySession_IdOrderBySequenceAsc(question.session.id).stream()
+        return questionRepository.findBySessionIdWithCurriculumOrderBySequenceAsc(question.session.id).stream()
                 .filter(next -> next.sequence > question.sequence)
                 .findFirst();
     }
 
     private Optional<QuestionEntity> firstUnansweredQuestion(LearningAttemptEntity attempt) {
-        return questionRepository.findBySession_IdOrderBySequenceAsc(attempt.session.id).stream()
+        return questionRepository.findBySessionIdWithCurriculumOrderBySequenceAsc(attempt.session.id).stream()
                 .filter(question -> !answerRepository.existsByAttempt_IdAndQuestion_Id(attempt.id, question.id))
                 .findFirst();
     }
 
+    private Optional<QuestionEntity> firstQuestion(Long sessionId) {
+        return questionRepository.findBySessionIdWithCurriculumOrderBySequenceAsc(sessionId).stream().findFirst();
+    }
+
     private Optional<SessionEntity> nextSession(SessionEntity session) {
-        return sessionRepository.findByStage_IdOrderBySequenceAsc(session.stage.id).stream()
+        return sessionRepository.findByStageIdWithCurriculumOrderBySequenceAsc(session.stage.id).stream()
                 .filter(next -> next.sequence > session.sequence)
                 .findFirst();
     }

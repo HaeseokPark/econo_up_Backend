@@ -8,6 +8,7 @@ import com.econoup.learning.LearningAnswerRepository;
 import com.econoup.learning.LearningAttemptEntity;
 import com.econoup.learning.LearningAttemptRepository;
 import com.econoup.learning.dto.AnswerRequest;
+import com.econoup.progress.ProgressService;
 import com.econoup.user.UserEntity;
 import com.econoup.user.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -35,6 +36,7 @@ public class ReviewService {
     private final LearningAttemptRepository learningAttemptRepository;
     private final QuestionRepository questionRepository;
     private final UserRepository userRepository;
+    private final ProgressService progressService;
     private final ObjectMapper objectMapper;
 
     public ReviewService(
@@ -45,6 +47,7 @@ public class ReviewService {
             LearningAttemptRepository learningAttemptRepository,
             QuestionRepository questionRepository,
             UserRepository userRepository,
+            ProgressService progressService,
             ObjectMapper objectMapper
     ) {
         this.reviewSetRepository = reviewSetRepository;
@@ -54,13 +57,14 @@ public class ReviewService {
         this.learningAttemptRepository = learningAttemptRepository;
         this.questionRepository = questionRepository;
         this.userRepository = userRepository;
+        this.progressService = progressService;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
     public Map<String, Object> today(UserEntity user) {
         ReviewSetEntity reviewSet = todaySet(user);
-        List<ReviewItemEntity> items = reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id);
+        List<ReviewItemEntity> items = reviewItems(reviewSet.id);
         Optional<QuestionEntity> nextQuestion = firstUnansweredQuestion(reviewSet, items);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("reviewSetId", reviewSet.id);
@@ -83,7 +87,7 @@ public class ReviewService {
                         () -> reviewAnswerRepository.save(new ReviewAnswerEntity(reviewSet, question, submittedJson, correct))
                 );
 
-        List<ReviewItemEntity> items = reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id);
+        List<ReviewItemEntity> items = reviewItems(reviewSet.id);
         Optional<QuestionEntity> nextQuestion = firstUnansweredQuestion(reviewSet, items);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("feedback", Map.of(
@@ -101,7 +105,7 @@ public class ReviewService {
     @Transactional
     public Map<String, Object> complete(UserEntity user, Long reviewSetId) {
         ReviewSetEntity reviewSet = findSet(user, reviewSetId);
-        long total = reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id).size();
+        long total = reviewItems(reviewSet.id).size();
         long correct = reviewAnswerRepository.countByReviewSet_IdAndCorrectTrue(reviewSet.id);
         int xp = (int) correct * 5;
         if (!"COMPLETED".equals(reviewSet.status)) {
@@ -110,6 +114,7 @@ public class ReviewService {
             reviewSet.xpGained = xp;
             user.totalXp += xp;
             userRepository.save(user);
+            progressService.record(user, xp, 3, false);
         }
         return Map.of(
                 "correctCount", correct,
@@ -156,7 +161,7 @@ public class ReviewService {
     private ReviewSetEntity findSet(UserEntity user, Long reviewSetId) {
         ReviewSetEntity reviewSet = reviewSetRepository.findById(reviewSetId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTENT_NOT_FOUND", "Review set not found."));
-        if (!Objects.equals(reviewSet.user.id, user.id)) {
+        if (!reviewSetRepository.existsByIdAndUser_Id(reviewSetId, user.id)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "You cannot access this review set.");
         }
         return reviewSet;
@@ -164,10 +169,10 @@ public class ReviewService {
 
     private QuestionEntity findQuestionInSet(ReviewSetEntity reviewSet, AnswerRequest request) {
         if (request == null || request.questionId() == null) {
-            return firstUnansweredQuestion(reviewSet, reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id))
+            return firstUnansweredQuestion(reviewSet, reviewItems(reviewSet.id))
                     .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVALID_QUESTION", "No unanswered review question."));
         }
-        return reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id).stream()
+        return reviewItems(reviewSet.id).stream()
                 .map(item -> item.question)
                 .filter(question -> Objects.equals(question.id, request.questionId()))
                 .findFirst()
@@ -190,23 +195,33 @@ public class ReviewService {
     }
 
     private int sequenceOf(ReviewSetEntity reviewSet, QuestionEntity question) {
-        return reviewItemRepository.findByReviewSet_IdOrderBySequenceAsc(reviewSet.id).stream()
+        return reviewItems(reviewSet.id).stream()
                 .filter(item -> Objects.equals(item.question.id, question.id))
                 .map(item -> item.sequence)
                 .findFirst()
                 .orElse(1);
     }
 
+    private List<ReviewItemEntity> reviewItems(Long reviewSetId) {
+        return reviewItemRepository.findWithQuestionsByReviewSetIdOrderBySequenceAsc(reviewSetId);
+    }
+
     private Map<String, Object> questionPayload(QuestionEntity question) {
+        QuestionEntity loadedQuestion = questionRepository.findWithCurriculumById(question.id)
+                .orElse(question);
         Map<String, Object> payload = new LinkedHashMap<>();
-        Map<String, Object> payloadJson = readJson(question.payloadJson);
-        payload.put("id", question.id);
-        payload.put("type", question.type);
-        payload.put("prompt", question.prompt);
-        payload.put("source", Map.of(
-                "categoryCode", question.session.stage.unit.category.code,
-                "stageTitle", question.session.stage.title
-        ));
+        Map<String, Object> payloadJson = readJson(loadedQuestion.payloadJson);
+        payload.put("id", loadedQuestion.id);
+        payload.put("type", loadedQuestion.type);
+        payload.put("prompt", loadedQuestion.prompt);
+        Map<String, Object> source = new LinkedHashMap<>();
+        if (loadedQuestion.session != null && loadedQuestion.session.stage != null) {
+            source.put("stageTitle", loadedQuestion.session.stage.title);
+            if (loadedQuestion.session.stage.unit != null && loadedQuestion.session.stage.unit.category != null) {
+                source.put("categoryCode", loadedQuestion.session.stage.unit.category.code);
+            }
+        }
+        payload.put("source", source);
         if (payloadJson.containsKey("choices")) {
             payload.put("choices", payloadJson.get("choices"));
         }

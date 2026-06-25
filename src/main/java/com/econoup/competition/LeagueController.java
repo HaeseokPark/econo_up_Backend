@@ -1,30 +1,31 @@
 package com.econoup.competition;
 
 import com.econoup.common.ApiResponse;
-import java.util.List;
-import java.util.Map;
+import com.econoup.user.UserEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/leagues")
 public class LeagueController {
+    private final LeagueService leagueService;
+
+    public LeagueController(LeagueService leagueService) {
+        this.leagueService = leagueService;
+    }
+
     @GetMapping("/me")
-    public ApiResponse<?> me() {
-        return ApiResponse.ok(Map.of(
-                "available", false,
-                "tier", "BRONZE",
-                "rank", 0,
-                "weeklyXp", 0
-        ));
+    public ApiResponse<?> me(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(leagueService.me(user));
     }
 
     @GetMapping("/{leagueId}/ranking")
-    public ApiResponse<?> ranking(@PathVariable String leagueId) {
-        return ApiResponse.ok(Map.of("leagueId", leagueId, "ranking", List.of()));
+    public ApiResponse<?> ranking(@AuthenticationPrincipal UserEntity user, @PathVariable String leagueId) {
+        return ApiResponse.ok(leagueService.ranking(user, leagueId));
     }
 
     @GetMapping("/results/latest")
-    public ApiResponse<?> latestResult() {
-        return ApiResponse.ok(Map.of("available", false, "result", ""));
+    public ApiResponse<?> latestResult(@AuthenticationPrincipal UserEntity user) {
+        return ApiResponse.ok(leagueService.latestResult(user));
     }
 }
