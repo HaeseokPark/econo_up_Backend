@@ -250,7 +250,12 @@ public class ReviewService {
         if ("THEORY_CARD".equals(question.type)) return true;
         Map<String, Object> expected = readJson(question.answerJson);
         if (expected.containsKey("choiceIds") && submitted.containsKey("choiceIds")) {
-            return asStringList(expected.get("choiceIds")).equals(asStringList(submitted.get("choiceIds")));
+            List<String> expectedIds = asStringList(expected.get("choiceIds"));
+            List<String> submittedIds = asStringList(submitted.get("choiceIds"));
+            if ("MULTIPLE_CHOICE".equals(question.type) || "MATCHING".equals(question.type) || "CLASSIFICATION".equals(question.type)) {
+                return new LinkedHashSet<>(expectedIds).equals(new LinkedHashSet<>(submittedIds));
+            }
+            return expectedIds.equals(submittedIds);
         }
         if (expected.containsKey("orderedItemIds") && submitted.containsKey("orderedItemIds")) {
             return asStringList(expected.get("orderedItemIds")).equals(asStringList(submitted.get("orderedItemIds")));
@@ -263,7 +268,8 @@ public class ReviewService {
         return !normalizedSubmitted.isBlank()
                 && (normalizedExpected.equals(normalizedSubmitted)
                 || normalizedExpected.startsWith(normalizedSubmitted)
-                || normalizedExpected.contains(normalizedSubmitted));
+                || normalizedExpected.contains(normalizedSubmitted)
+                || containsAnswerTokens(stringify(expected.getOrDefault("rawText", "")), submittedText(submitted)));
     }
 
     private List<String> asStringList(Object value) {
@@ -319,6 +325,16 @@ public class ReviewService {
         return Normalizer.normalize(value, Normalizer.Form.NFKC)
                 .toUpperCase(Locale.ROOT)
                 .replaceAll("[\\s,._:()\\[\\]/%-]", "");
+    }
+
+    private boolean containsAnswerTokens(String expectedText, String submittedText) {
+        String normalizedSubmitted = normalize(submittedText);
+        List<String> tokens = Arrays.stream(expectedText.replaceAll("[①②③④⑤]", " ").split("[\\s,/·:()\\[\\]%-]+"))
+                .map(this::normalize)
+                .filter(token -> token.length() >= 2 || token.matches("\\d+"))
+                .distinct()
+                .toList();
+        return !tokens.isEmpty() && tokens.stream().allMatch(normalizedSubmitted::contains);
     }
 
     private int percent(long done, long total) {
