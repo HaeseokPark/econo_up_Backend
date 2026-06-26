@@ -50,7 +50,7 @@ public class QuestionInteractionService {
         if (expected.containsKey("choiceIds") && submitted.containsKey("choiceIds")) {
             List<String> expectedIds = asStringList(expected.get("choiceIds"));
             List<String> submittedIds = asStringList(submitted.get("choiceIds"));
-            if ("MULTI_SELECT".equals(type) || "MATCHING".equals(type)) {
+            if ("MULTIPLE_CHOICE".equals(type) || "MULTI_SELECT".equals(type) || "MATCHING".equals(type) || "CLASSIFICATION".equals(type)) {
                 return new HashSet<>(expectedIds).equals(new HashSet<>(submittedIds));
             }
             return expectedIds.equals(submittedIds);
@@ -66,7 +66,8 @@ public class QuestionInteractionService {
         return !normalizedSubmitted.isBlank()
                 && (normalizedExpected.equals(normalizedSubmitted)
                 || normalizedExpected.startsWith(normalizedSubmitted)
-                || normalizedExpected.contains(normalizedSubmitted));
+                || normalizedExpected.contains(normalizedSubmitted)
+                || containsAnswerTokens(stringify(expected.getOrDefault("rawText", "")), submittedText(submitted)));
     }
 
     public Map<String, Object> correctAnswer(QuestionEntity question) {
@@ -137,6 +138,16 @@ public class QuestionInteractionService {
         return Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFKC)
                 .toUpperCase(Locale.ROOT)
                 .replaceAll("[\\s,._:()\\[\\]/%-]", "");
+    }
+
+    private boolean containsAnswerTokens(String expectedText, String submittedText) {
+        String normalizedSubmitted = normalize(submittedText);
+        List<String> tokens = Arrays.stream(expectedText.replaceAll("[①②③④⑤]", " ").split("[\\s,/·:()\\[\\]%-]+"))
+                .map(this::normalize)
+                .filter(token -> token.length() >= 2 || token.matches("\\d+"))
+                .distinct()
+                .toList();
+        return !tokens.isEmpty() && tokens.stream().allMatch(normalizedSubmitted::contains);
     }
 
     private String stringify(Object value) {
